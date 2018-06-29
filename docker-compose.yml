@@ -1,0 +1,134 @@
+version: '3'
+services:
+
+  redis:
+    image: redis
+    ports:
+      - "6379:6379"
+
+  zookeeper10:
+    image: wurstmeister/zookeeper
+    ports:
+      - "2181:2181"
+    networks:
+      - kafka-net
+
+  kafka:
+   image: confluentinc/cp-kafka:4.1.0
+   environment:
+     - KAFKA_ZOOKEEPER_CONNECT=zookeeper10:2181/tweets
+     - KAFKA_BROKER_ID=2
+     - KAFKA_JMX_PORT=9999
+     - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+     - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://10.33.0.150:9092
+   ports:
+    - "9092:9092"
+    - "9999:9093"
+   links:
+     - zookeeper10
+   networks:
+     - kafka-net
+
+  kafka-connect:
+    image: confluentinc/cp-kafka-connect
+    environment:
+      - CONNECT_BOOTSTRAP_SERVERS=kafka:9092
+      - CONNECT_REST_PORT=28083
+      - CONNECT_GROUP_ID=json-tweets
+      - CONNECT_CONFIG_STORAGE_TOPIC=json-tweets-config
+      - CONNECT_OFFSET_STORAGE_TOPIC=json-tweets-offsets
+      - CONNECT_STATUS_STORAGE_TOPIC=json-tweets-status
+      - CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR=1
+      - CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR=1
+      - CONNECT_STATUS_STORAGE_REPLICATION_FACTOR=1
+      - CONNECT_KEY_CONVERTER=io.confluent.connect.avro.AvroConverter
+      - CONNECT_VALUE_CONVERTER=io.confluent.connect.avro.AvroConverter
+      - CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL=http://schema-registry:8090
+      - CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL=http://schema-registry:8090
+      - CONNECT_INTERNAL_KEY_CONVERTER=org.apache.kafka.connect.json.JsonConverter
+      - CONNECT_INTERNAL_VALUE_CONVERTER=org.apache.kafka.connect.json.JsonConverter
+      - CONNECT_REST_ADVERTISED_HOST_NAME=localhost
+      - CONNECT_LOG4J_ROOT_LOGLEVEL=ERROR
+      - CONNECT_LOG4J_LOGGERS=org.reflections=ERROR
+      - CONNECT_PLUGIN_PATH=/usr/share/java,/etc/kafka-connect/jars
+    volumes:
+      - /tmp/quickstart/file:/tmp/quickstart
+      - /tmp/quickstart/jars:/etc/kafka-connect/jars
+    ports:
+      - "28083:28083"
+    links:
+      - kafka
+      - schema-registry
+    networks:
+      - kafka-net
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry
+    environment:
+      - SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL=zookeeper10:2181/tweets
+      - SCHEMA_REGISTRY_HOST_NAME="schema-test"
+      - SCHEMA_REGISTRY_LISTENERS=http://0.0.0.0:8090
+      - SCHEMA_REGISTRY_DEBUG=true
+    ports:
+      - "8090:8090"
+    links:
+      - zookeeper10
+    networks:
+      - kafka-net
+
+  schema-registry-ui:
+    image: landoop/schema-registry-ui
+    environment:
+      - SCHEMAREGISTRY_URL="http://kafka-net:8090"
+      - PROXY=true
+    ports:
+      - "8000:8000"
+    links:
+      - schema-registry
+    networks:
+      - kafka-net
+
+  kafka-connect-ui:
+    image: landoop/kafka-connect-ui
+    environment:
+      - CONNECT_URL=kafka-connect:28083
+    links:
+      - kafka-connect
+    networks:
+      - kafka-net
+    ports:
+      - "8096:8000"
+
+  kafka-rest:
+     image: confluentinc/cp-kafka-rest
+     environment:
+       # - KAFKA_REST_BOOTSTRAP_SERVERS="PLAINTEXT://10.33.0.150:9092"
+       - KAFKA_REST_ID=1
+       - KAFKA_REST_LISTENERS=http://0.0.0.0:8081
+       - KAFKA_REST_SCHEMA_REGISTRY_URL=http://schema-registry:8090
+       - KAFKA_REST_ZOOKEEPER_CONNECT=zookeeper10:2181/tweets
+       - KAFKA_REST_HOST_NAME=""
+     ports:
+       - "8091:8081"
+     links:
+       - zookeeper10
+       - schema-registry
+     networks:
+       - kafka-net
+
+  kafka-rest-ui:
+    image: landoop/kafka-topics-ui
+    environment:
+      - KAFKA_REST_PROXY_URL=http://kafka-rest:8081
+      - PROXY=true
+    ports:
+      - "8095:8000"
+    links:
+      - kafka-rest
+    networks:
+      - kafka-net
+
+networks:
+  kafka-net:
+
+
