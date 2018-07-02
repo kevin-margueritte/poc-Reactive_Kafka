@@ -36,8 +36,6 @@ trait Config extends ActorConfig with KafkaConfig with RedisConfig {
   import com.softwaremill.macwire._
   val log = system.log
 
-  //val log = Logging(system, this)
-
   val dao: TweetDAO = wire[TweetDAOImpl]
   val service: CounterService = wire[CounterServiceImpl]
 
