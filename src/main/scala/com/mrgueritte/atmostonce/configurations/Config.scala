@@ -7,7 +7,7 @@ import com.mrgueritte.atmostonce.dao.{TweetDAO, TweetDAOImpl}
 import com.mrgueritte.atmostonce.service.{CounterService, CounterServiceImpl}
 import com.redis.RedisClient
 import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.apache.kafka.common.serialization.StringDeserializer
+import org.apache.kafka.common.serialization.ByteArrayDeserializer
 
 trait ActorConfig {
   implicit val system = ActorSystem("atmostonce")
@@ -21,7 +21,7 @@ trait KafkaConfig {
   val config = system.settings.config.getConfig("akka.kafka.consumer")
 
   val consumerSettings =
-    ConsumerSettings(config, new StringDeserializer, new StringDeserializer)
+    ConsumerSettings(config, new ByteArrayDeserializer, new ByteArrayDeserializer)
       .withBootstrapServers("localhost:9092")
       .withGroupId("2")
       .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")

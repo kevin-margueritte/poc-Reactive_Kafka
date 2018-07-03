@@ -1,18 +1,22 @@
 package com.mrgueritte.atmostonce.service
 
+import java.nio.ByteBuffer
+
+import akka.stream.scaladsl.Flow
 import com.mrgueritte.atmostonce.dao.TweetDAO
 import com.mrgueritte.atmostonce.model.Tweet
-import io.circe.parser.decode
+import io.circe.jawn.JawnParser
 import org.apache.kafka.clients.consumer.ConsumerRecord
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 
 class CounterServiceImpl(dao: TweetDAO)(implicit val ec: ExecutionContext) extends CounterService {
 
-  override def decodeTweetRecord(record: ConsumerRecord[String, String]): Future[Either[String, Tweet]] = Future {
-    decode[Tweet](record.value()) match {
+  override def decodeTweetRecord(record: ConsumerRecord[Array[Byte], Array[Byte]]): Either[String, Tweet] = {
+    val parser = new JawnParser
+    parser.decodeByteBuffer[Tweet](ByteBuffer.wrap(record.value())) match {
       case Right(t) => Right(t)
-      case Left(error) => Left(s"Unable to parse record => ${record.value()}")
+      case Left(_)  => Left(s"Unable to parse record => ${record.value()}")
     }
   }
 
@@ -25,4 +29,5 @@ class CounterServiceImpl(dao: TweetDAO)(implicit val ec: ExecutionContext) exten
     dao.setScreenName(userId, tweet.user.screenName)
     dao.setTweetLikeCount(userId, tweet.like)
   }
+
 }

@@ -6,9 +6,9 @@ import io.circe.Decoder
 case class Tweet(id: Long, user: User, hashtags: Hashtags, mentions: Mentions, like: Long)
 
 object Tweet {
-  import User.userDecoder
   import Hashtags.hashtagsDecoder
   import Mentions.mentionsDecoder
+  import User.userDecoder
 
   implicit val tweetDecoder: Decoder[Tweet] = {
     val like = Decoder.instance(_.get[Long]("favorite_count"))
