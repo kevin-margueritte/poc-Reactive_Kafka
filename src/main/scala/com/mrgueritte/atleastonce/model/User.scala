@@ -1,9 +1,7 @@
 package com.mrgueritte.atleastonce.model
 
-import io.circe.{Decoder, Encoder, HCursor, Json}
-import io.circe.generic.auto._
-import io.circe._
-import io.circe.derivation._
+import io.circe.derivation.deriveEncoder
+import io.circe.{Decoder, HCursor}
 
 case class User(id: Long, screenName: String)
 

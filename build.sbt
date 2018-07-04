@@ -21,7 +21,8 @@ val circeVersion = "0.9.3"
 libraryDependencies ++= Seq(
   "io.circe" %% "circe-core"        % circeVersion,
   "io.circe" %% "circe-generic"     % circeVersion,
-  "io.circe" %% "circe-parser"      % circeVersion
+  "io.circe" %% "circe-parser"      % circeVersion,
+  "io.circe" %% "circe-derivation"  % "0.9.0-M3"
 )
 
 libraryDependencies ++= Seq(

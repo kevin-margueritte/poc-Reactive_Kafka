@@ -3,13 +3,13 @@ package com.mrgueritte.atleastonce
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerMessage.CommittableOffsetBatch
 import akka.kafka._
-import akka.kafka.scaladsl.Consumer.DrainingControl
 import akka.kafka.scaladsl.{Consumer, Producer}
-import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.{Keep, Sink}
+import akka.stream.scaladsl.{Flow, GraphDSL, RunnableGraph, Sink, Unzip, Zip}
+import akka.stream.{ActorMaterializer, ClosedShape, FlowShape}
 import cats.data.Kleisli
 import cats.implicits._
 import com.mrgueritte.atleastonce.model.Tweet
@@ -19,7 +19,6 @@ import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.{StringDeserializer, StringSerializer}
 
-import scala.concurrent.duration._
 import scala.util.{Success, Try}
 
 object Main extends App {
@@ -38,26 +37,45 @@ object Main extends App {
       .withGroupId("2")
       .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
 
-  val source = Consumer
-    .committableSource(consumerSettings, Subscriptions.topics("tweets"))
-    .map { msg =>
-      business(msg.record.value) match {
-          case Right(tw) =>
-            ProducerMessage.Message(
-              new ProducerRecord[String, String]("tweets-mario-fr", tw.id.toString, tw.asJson.noSpaces),
-              msg.committableOffset
-            )
-          case _ => ProducerMessage.PassThroughMessage[String, String, ConsumerMessage.CommittableOffset](msg.committableOffset)
-        }
-    }
-    .via(Producer.flexiFlow(producerSettings))
-    .map(_.passThrough)
-    .groupedWithin(10, 5.seconds)
-    .map(CommittableOffsetBatch.apply)
-    .mapAsync(3)(_.commitScaladsl())
-    .toMat(Sink.ignore)(Keep.both)
-    .mapMaterializedValue(DrainingControl.apply)
-    .run()
+  RunnableGraph.fromGraph(GraphDSL.create() { implicit builder: GraphDSL.Builder[NotUsed] =>
+    import GraphDSL.Implicits._
+
+    // Source
+    val source = Consumer.committableSource(consumerSettings, Subscriptions.topics("tweets"))
+
+    // Flows
+    val msgValueOffsets   = builder.add(Flow.fromFunction[ConsumerMessage.CommittableMessage[String, String],
+        (ConsumerMessage.CommittableOffset, String)](record => (record.committableOffset, record.record.value())))
+
+    val splitOffsetsValue = builder.add(Unzip[ConsumerMessage.CommittableOffset, String]())
+
+    val businessFlow      = builder.add(Flow.fromFunction(business))
+
+    val messageToKafka    = builder.add(Flow[(ConsumerMessage.CommittableOffset, Either[String, Tweet])].map {
+      case (offsets, Left(_)) => ProducerMessage.PassThroughMessage[String, String, ConsumerMessage.CommittableOffset](offsets)
+      case (offsets, Right(tw)) =>
+        ProducerMessage.Message(
+          new ProducerRecord[String, String]("tweets-mario-fr", tw.id.toString, tw.asJson.noSpaces),
+          offsets
+        )
+    })
+
+    val producerFlow = Producer.
+      flexiFlow[String, String, ConsumerMessage.CommittableOffset](producerSettings)
+      .map(_.passThrough)
+      .map(CommittableOffsetBatch.apply)
+      .mapAsync(3)(_.commitScaladsl())
+
+    // Merge
+    val zip = builder.add(Zip.apply[ConsumerMessage.CommittableOffset, Either[String, Tweet]]())
+
+    source ~> msgValueOffsets ~> splitOffsetsValue.in
+                                 splitOffsetsValue.out0                 ~> zip.in0
+                                 splitOffsetsValue.out1 ~> businessFlow ~> zip.in1
+                                                                           zip.out ~> messageToKafka ~> producerFlow ~> Sink.ignore
+
+    ClosedShape
+  }).run()
 
   def business(msg: String) = {
     checkFrLanguage.compose(checkMario).compose(parsingCreationDate).compose(parseRecord).run(msg)

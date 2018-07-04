@@ -1,14 +1,14 @@
 package com.mrgueritte.atleastonce.model
 
 import io.circe.derivation.deriveEncoder
-import io.circe.{Decoder, Encoder, HCursor, Json}
+import io.circe.{Decoder, HCursor}
 
 case class Tweet(id: Long, creationDate: String, text: String, lang: String, user: User, hashtags: Hashtags, medias: Medias)
 
 object Tweet {
   import Hashtags._
-  import User._
   import Medias._
+  import User._
 
   implicit val tweetEncoder = deriveEncoder[Tweet]
   implicit val tweetDecoder: Decoder[Tweet] = new Decoder[Tweet] {
